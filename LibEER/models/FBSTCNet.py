@@ -19,14 +19,43 @@ from skorch.callbacks import LRScheduler
 from torch.optim import AdamW
 from braindecode.training import CroppedLoss
 from braindecode.util import set_random_seeds
-from braindecode.models import get_output_shape
 from sklearn.metrics import confusion_matrix
 
 from braindecode.util import np_to_th
-from braindecode.models.modules import Expression, Ensure4d
-from braindecode.models.functions import (
-    safe_log, square, transpose_time_to_spat
-)
+#from braindecode.models.modules import Expression, Ensure4d
+# from braindecode.models.functions import (
+#     safe_log, square, transpose_time_to_spat
+# )
+
+# === 修复开始：手动定义缺失的 Braindecode 工具类 ===
+import torch
+from torch import nn
+
+class Ensure4d(nn.Module):
+    def forward(self, x):
+        while(len(x.shape) < 4):
+            x = x.unsqueeze(-1)
+        return x
+
+class Expression(nn.Module):
+    def __init__(self, expression_fn):
+        super(Expression, self).__init__()
+        self.expression_fn = expression_fn
+    def forward(self, *x):
+        return self.expression_fn(*x)
+
+def safe_log(x, eps=1e-6):
+    return torch.log(torch.clamp(x, min=eps))
+
+def square(x):
+    return x * x
+
+def transpose_time_to_spat(x):
+    # 将 (Batch, Channel, Time, 1) 转换为 (Batch, 1, Time, Channel)
+    return x.permute(0, 3, 2, 1)
+# === 修复结束 ===
+
+
 
 def get_padding(kernel_size, stride=1, dilation=1, **_):
     if isinstance(kernel_size, tuple):

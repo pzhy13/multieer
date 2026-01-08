@@ -35,13 +35,13 @@ import torch.nn as nn
 
 #    deap dep
 #    arousal
-#    python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 256 -epochs 300 -lr 0.02 -only_seg -sample_length 512 -stride 128 -bounds 5 5 -label_used arousal -seed 2024 -onehot >EEGNet/deap_arousal_b512e300lr0.02.log
+#    python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 300 -lr 0.02 -only_seg -sample_length 512 -stride 128 -bounds 5 5 -label_used arousal -seed 2024 -onehot >EEGNet/deap_arousal_b512e300lr0.02.log
 #    0.6130/0.1588	0.5326/0.1305
 #    valence
-#    python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 256 -epochs 300 -lr 0.02 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence -seed 2024 -onehot >EEGNet/deap_valence_b256e300lr0.02.log
+#    python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 300 -lr 0.02 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence -seed 2024 -onehot >EEGNet/deap_valence_b256e300lr0.02.log
 #    0.5150/0.1157	0.4785/0.1170
 #    both
-#    python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 256 -epochs 300 -lr 0.04 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence arousal -seed 2024 -onehot >EEGNet/deap_both_b256e300lr0.04.log
+#    python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 300 -lr 0.04 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence arousal -seed 2024 -onehot >EEGNet/deap_both_b256e300lr0.04.log
 #    0.3941/0.1153	0.2919/0.1021
 
 #    seed iv indep
@@ -63,13 +63,13 @@ import torch.nn as nn
 
 #    deap indep
 #    valence
-#    CUDA_VISIBLE_DEVICES=3 nohup python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 128 -epochs 300 -lr 0.02 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence -seed 2024 >EEGNet_indep/deap_valence_b128e300lr0.02.log
+#    CUDA_VISIBLE_DEVICES=3 nohup python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 128 -epochs 300 -lr 0.02 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence -seed 2024 >EEGNet_indep/deap_valence_b128e300lr0.02.log
 #    0.5236	0.4974
 #    arousal
-#    CUDA_VISIBLE_DEVICES=3 nohup python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 512 -epochs 300 -lr 0.02 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used arousal -seed 2024 >EEGNet_indep/deap_arousal_b512e300lr0.02.log
+#    CUDA_VISIBLE_DEVICES=3 nohup python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 512 -epochs 300 -lr 0.02 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used arousal -seed 2024 >EEGNet_indep/deap_arousal_b512e300lr0.02.log
 #    0.4894	0.4894
 #    both
-#    CUDA_VISIBLE_DEVICES=3 nohup python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 256 -epochs 300 -lr 0.02 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence arousal -seed 2024 >EEGNet_indep/deap_both_b256e300lr0.02.log
+#    CUDA_VISIBLE_DEVICES=3 nohup python EEGNet_train.py -metrics 'acc' 'macro-f1' -model EEGNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 300 -lr 0.02 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence arousal -seed 2024 >EEGNet_indep/deap_both_b256e300lr0.02.log
 #    0.2541	0.2444
 
 

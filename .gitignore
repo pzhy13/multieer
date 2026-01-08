@@ -1,0 +1,8 @@
+LibEER/data_original/
+LibEER/data_preprocessed_python/
+*.pyc
+LibEER/faces_224/
+LibEER/result/
+LibEER.code-workspace
+.github/copilot-instructions.md
+.vscode/settings.json

@@ -37,7 +37,7 @@ import numpy as np
 
 #    deap indep
 #    valence
-#    python TSception_train.py -metrics 'acc' 'macro-f1' -model TSception -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 64 -epochs 300 -lr 0.001 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence -seed 2024 >TSception_indep/deap_valence_b64e300lr0.001.log
+#    python TSception_train.py -metrics 'acc' 'macro-f1' -model TSception -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 64 -epochs 300 -lr 0.001 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used valence -seed 2024 >TSception_indep/deap_valence_b64e300lr0.001.log
 #    0.5444	0.4894
 #    arousal
 #    python TSception_train.py -metrics 'acc' 'macro-f1' -model TSception -metric_choose 'macro-f1'  -setting hci_sub_dependent_train_val_test_setting -dataset_path "/data1/cxx/HCI数据集/" -dataset hci -batch_size 32 -epochs 300 -lr 0.001 -only_seg -sample_length 128 -stride 128 -bounds 5 5 -label_used arousal -seed 2024 >TSception/hci_arousal_b32e300lr0.001.log

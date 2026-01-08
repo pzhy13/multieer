@@ -41,13 +41,13 @@ import torch.nn as nn
 
 #    deap dep
 #    arousal
-#    CUDA_VISIBLE_DEVICES=2 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 256 -epochs 100 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024 >DBN/deap_arousal_b256e100lr0.001.log
+#    CUDA_VISIBLE_DEVICES=2 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 100 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024 >DBN/deap_arousal_b256e100lr0.001.log
 #    0.6460/0.1942	0.5261/0.1985
 #    valence
-#    CUDA_VISIBLE_DEVICES=2 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 256 -epochs 100 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024 >DBN/deap_valence_b256e100lr0.001.log
+#    CUDA_VISIBLE_DEVICES=2 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 100 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024 >DBN/deap_valence_b256e100lr0.001.log
 #    0.5608/0.1738	0.4861/0.1933
 #    both
-#    CUDA_VISIBLE_DEVICES=2 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 512 -epochs 100 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence arousal -seed 2024 >DBN/deap_both_b512e100lr0.001.log
+#    CUDA_VISIBLE_DEVICES=2 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 512 -epochs 100 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence arousal -seed 2024 >DBN/deap_both_b512e100lr0.001.log
 #    0.3950/0.1399	0.2488/0.1079
 
 #    seed indep
@@ -70,10 +70,10 @@ import torch.nn as nn
 
 #    deap indep
 #    arousal
-#    CUDA_VISIBLE_DEVICES=0 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 64 -epochs 300 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024   >DBN_indep/deap_arousal_b64e300lr0.001.log
+#    CUDA_VISIBLE_DEVICES=0 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 64 -epochs 300 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024   >DBN_indep/deap_arousal_b64e300lr0.001.log
 #    0.5099	0.5009
 #    valence
-#    CUDA_VISIBLE_DEVICES=0 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 128 -epochs 300 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024  >DBN_indep/deap_valence_b128e300lr0.001.log
+#    CUDA_VISIBLE_DEVICES=0 nohup python DBN_train.py -metrics 'acc' 'macro-f1' -model DBN -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 128 -epochs 300 -lr 0.001  -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024  >DBN_indep/deap_valence_b128e300lr0.001.log
 #    0.5502	0.5314
 #    both
 #    0.2784	0.2436

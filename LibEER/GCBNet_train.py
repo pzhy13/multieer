@@ -40,13 +40,13 @@ import torch.nn as nn
 
 #    deap dep
 #    both
-#    python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 128 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence arousal -seed 2024 -onehot >GCBNet/deap_both_b128e150lr0.005.log
+#    python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 128 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence arousal -seed 2024 -onehot >GCBNet/deap_both_b128e150lr0.005.log
 #    0.3880/0.1623	0.2789/0.1594
 #    valence
-#    python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 128 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024 -onehot >GCBNet/deap_valence_b128e150lr0.005.log
+#    python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 128 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024 -onehot >GCBNet/deap_valence_b128e150lr0.005.log
 #    0.5649/0.1817	0.5036/0.1957
 #    arousal
-#    python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 512 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024 -onehot >GCBNet/deap_arousal_b512e150lr0.005.log
+#    python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 512 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024 -onehot >GCBNet/deap_arousal_b512e150lr0.005.log
 #    0.6595/0.1761	0.5534/0.1786
 
 #    hci indep
@@ -62,13 +62,13 @@ import torch.nn as nn
 
 #    deap indep
 #    valence
-#    CUDA_VISIBLE_DEVICES=2 nohup python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 256 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024 >GCBNet_indep/deap_valence_b256e150lr0.005.log
+#    CUDA_VISIBLE_DEVICES=2 nohup python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024 >GCBNet_indep/deap_valence_b256e150lr0.005.log
 #    0.5358	0.5068
 #    arousal
-#    CUDA_VISIBLE_DEVICES=2 nohup python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 128 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024 >GCBNet_indep/deap_arousal_b128e150lr0.005.log
+#    CUDA_VISIBLE_DEVICES=2 nohup python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 128 -epochs 150 -lr 0.005 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024 >GCBNet_indep/deap_arousal_b128e150lr0.005.log
 #    0.5005	0.4779
 #    both
-#    CUDA_VISIBLE_DEVICES=2 nohup python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 128 -epochs 150 -lr 0.01 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence arousal -seed 2024 >GCBNet_indep/deap_both_b128e150lr0.01.log
+#    CUDA_VISIBLE_DEVICES=2 nohup python GCBNet_train.py -metrics 'acc' 'macro-f1' -model GCBNet -metric_choose 'macro-f1' -setting deap_sub_independent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 128 -epochs 150 -lr 0.01 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence arousal -seed 2024 >GCBNet_indep/deap_both_b128e150lr0.01.log
 #    0.3092	0.3098
 
 # s5_indep

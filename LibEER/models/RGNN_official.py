@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function
-from torch_geometric.nn import SGConv, global_add_pool
+from torch_geometric.nn import MessagePassing, global_add_pool  
 from torch_geometric.data import Data
 
 import torch.utils.data
@@ -59,11 +59,23 @@ def add_remaining_self_loops(edge_index,
 
     return edge_index, edge_weight
 
+# === 修改开始：重写 NewSGConv 适配 PyG 2.x ===
+class NewSGConv(MessagePassing):
+    def __init__(self, num_features, num_classes, K=1, cached=False, bias=True):
+        # 初始化 MessagePassing，聚合方式为 'add'
+        super(NewSGConv, self).__init__(aggr='add')
+        
+        self.K = K
+        self.cached = cached
+        self.cached_result = None
+        
+        # 手动定义线性层（原 SGConv 自带，现在我们需要自己加）
+        self.lin = nn.Linear(num_features, num_classes, bias=bias)
+        self.reset_parameters()
 
-class NewSGConv(SGConv):
-    def __init__(self, num_features, num_classes, K=1, cached=False,
-                 bias=True):
-        super(NewSGConv, self).__init__(num_features, num_classes, K=K, cached=cached, bias=bias)
+    def reset_parameters(self):
+        self.lin.reset_parameters()
+        self.cached_result = None
 
     # allow negative edge weights
     @staticmethod
@@ -86,10 +98,13 @@ class NewSGConv(SGConv):
     def forward(self, x, edge_index, edge_weight=None):
         """"""
         if not self.cached or self.cached_result is None:
+            # 计算归一化后的邻接矩阵和 norm
             edge_index, norm = NewSGConv.norm(
                 edge_index, x.size(0), edge_weight, dtype=x.dtype)
 
+            # 显式进行 K 次传播
             for k in range(self.K):
+                # 这里调用 propagate，会把 norm 传给下面的 message 函数
                 x = self.propagate(edge_index, x=x, norm=norm)
             self.cached_result = x
 
@@ -99,6 +114,7 @@ class NewSGConv(SGConv):
         # x_j: (batch_size*num_nodes*num_nodes, num_features)
         # norm: (batch_size*num_nodes*num_nodes, )
         return norm.view(-1, 1) * x_j
+# === 修改结束 ===
 
 
 class ReverseLayerF(Function):

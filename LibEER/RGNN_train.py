@@ -45,13 +45,14 @@ from torch.utils.data import Dataset
 
 #    deap dep
 #    deap arousal
-#    python RGNN_train.py -metrics 'acc' 'macro-f1' -model RGNN_official -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 512 -epochs 150 -lr 0.01 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024 >RGNN/deap_arousal_b512e150lr0.01.log
+#    python RGNN_train.py -metrics 'acc' 'macro-f1' -model RGNN_official -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 512 -epochs 150 -lr 0.01 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used arousal -seed 2024 >RGNN/deap_arousal_b512e150lr0.01.log
 #    0.6609/0.1391	0.4927/0.1286
 #    deap valence
-#    python RGNN_train.py -metrics 'acc' 'macro-f1' -model RGNN_official -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 256 -epochs 150 -lr 0.01 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024 >RGNN/deap_valence_b256e150lr0.01.log
+#    python RGNN_train.py -metrics 'acc' 'macro-f1' -model RGNN_official -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 150 -lr 0.01 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence -seed 2024 >RGNN/deap_valence_b256e150lr0.01.log
 #    0.5590/0.1624	0.4725/0.1755
 #    deap both
-#    python RGNN_train.py -metrics 'acc' 'macro-f1' -model RGNN_official -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /data1/cxx/DEAP/data_preprocessed_python -dataset deap -batch_size 256 -epochs 150 -lr 0.01 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence arousal -seed 2024 >RGNN/deap_both_b256e150lr0.01.log
+#    nohup python RGNN_train.py -metrics 'acc' 'macro-f1' -model RGNN_official -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 150 -lr 0.01 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence arousal -seed 2024 > train1231-eegnet-test.log 2>&1 &
+#    python RGNN_train.py -metrics 'acc' 'macro-f1' -model RGNN_official -metric_choose 'macro-f1' -setting deap_sub_dependent_train_val_test_setting -dataset_path /home/pzy/LibEER/LibEER/data_preprocessed_python -dataset deap -batch_size 256 -epochs 150 -lr 0.01 -time_window 1 -feature_type de_lds -bounds 5 5 -label_used valence arousal -seed 2024 >RGNN/deap_both_b256e150lr0.01.log
 #    0.4453/0.1435	0.2588/0.1208
 
 #    seed indep
@@ -146,7 +147,7 @@ def main(args):
             loss_func = SparseL1Regularization(0.01)
             output_dir = make_output_dir(args, "RGNN")
             round_metric = train(model=model, dataset_train=dataset_train, dataset_val=dataset_val, dataset_test=dataset_test, edge_adj=edge_adj, device=device, output_dir=output_dir, metrics=args.metrics, optimizer=optimizer,
-                                 batch_size=args.batch_size, epochs=args.epochs, criterion=criterion, test_sub_label=test_sub_label, loss_func=loss_func, loss_param=model.edge_weight)
+                                 batch_size=args.batch_size, epochs=args.epochs, criterion=criterion, loss_func=loss_func, loss_param=model.edge_weight)
             best_metrics.append(round_metric)
             if setting.experiment_mode == "subject-dependent":
                 subjects_metrics[rridx-1].append(round_metric)
