@@ -60,7 +60,7 @@ def get_visual_data_aligned(args):
     print(f"正在构建视觉数据集索引 (Cross-Trail Mode)...")
     all_labels = {}
     # 读取所有被试的标签文件
-    for sub_id in range(1, 33):
+    for sub_id in range(1, 23):
         path = os.path.join(args.dataset_path, f"s{sub_id:02d}.dat")
         if os.path.exists(path):
             with open(path, 'rb') as f:
@@ -72,7 +72,7 @@ def get_visual_data_aligned(args):
     aligned_data = []  # 结构: [Subject_1_Trails, Subject_2_Trails, ...]
     aligned_label = [] # 结构: [Subject_1_Labels, Subject_2_Labels, ...]
 
-    for sub_id in range(1, 33):
+    for sub_id in range(1, 23):
         sub_str = f"s{sub_id:02d}"
         sub_trails_data = []  # 存放该被试所有 Trail 的图片路径列表
         sub_trails_label = [] # 存放该被试所有 Trail 的标签列表

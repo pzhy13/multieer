@@ -6,3 +6,8 @@ LibEER/result/
 LibEER.code-workspace
 .github/copilot-instructions.md
 .vscode/settings.json
+LibEER/cudatest.py
+LibEER/debug_find_empty_trails.py
+LibEER/export_eegnet.py
+LibEER/mptest.py
+LibEER/test_face_recog.py
