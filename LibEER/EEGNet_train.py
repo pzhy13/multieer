@@ -1,3 +1,8 @@
+import os
+import torch
+import torch.optim as optim
+import torch.nn as nn
+import pickle  # 🔥 新增
 from models.Models import Model
 from config.setting import seed_sub_dependent_front_back_setting, preset_setting, set_setting_by_args
 from data_utils.load_data import get_data
@@ -83,15 +88,34 @@ def main(args):
     data, label = merge_to_part(data, label, setting)
     device = torch.device(args.device)
     best_metrics = []
-    subjects_metrics = [[]for _ in range(len(data))]
+    subjects_metrics = [[] for _ in range(len(data))]
+    
+    base_output_dir = make_output_dir(args, "EEGNet")
+
     for rridx, (data_i, label_i) in enumerate(zip(data, label), 1):
         tts = get_split_index(data_i, label_i, setting)
+        
+        # 🔥 修改点 1: 创建目录并保存 Split Index (名单)
+        subject_output_dir = os.path.join(base_output_dir, f"sub{rridx:02d}")
+        if not os.path.exists(subject_output_dir):
+            os.makedirs(subject_output_dir)
+            
+        # 🔥 将划分方案保存为文件，供后续视觉和融合模型使用
+        split_save_path = os.path.join(subject_output_dir, "split.pkl")
+        with open(split_save_path, 'wb') as f:
+            pickle.dump(tts, f)
+        print(f"Subject {rridx}: Split indices saved to {split_save_path}")
+
+        print(f"\n========== Training Subject {rridx} ==========")
+        print(f"Checkpoints will be saved to: {subject_output_dir}")
+
         for ridx, (train_indexes, test_indexes, val_indexes) in enumerate(zip(tts['train'], tts['test'], tts['val']), 1):
-            setup_seed(args.seed)
+            setup_seed(args.seed) # 保持随机性控制
+            
             if val_indexes[0] == -1:
-                print(f"train indexes:{train_indexes}, test indexes:{test_indexes}")
+                print(f"Fold {ridx} - Train: {len(train_indexes)}, Test: {len(test_indexes)}")
             else:
-                print(f"train indexes:{train_indexes}, val indexes:{val_indexes}, test indexes:{test_indexes}")
+                print(f"Fold {ridx} - Train: {len(train_indexes)}, Val: {len(val_indexes)}, Test: {len(test_indexes)}")
 
             # split train and test data by specified experiment mode
             train_data, train_label, val_data, val_label, test_data, test_label = \
@@ -109,10 +133,22 @@ def main(args):
             dataset_test = torch.utils.data.TensorDataset(torch.Tensor(test_data), torch.Tensor(test_label))
             optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-8)
             criterion = nn.CrossEntropyLoss()
-            output_dir = make_output_dir(args, "EEGNet")
-            round_metric = train(model=model, dataset_train=dataset_train, dataset_val=dataset_val, dataset_test=dataset_test, device=device
-                                 ,output_dir=output_dir, metrics=args.metrics, metric_choose=args.metric_choose, optimizer=optimizer,
-                                 batch_size=args.batch_size, epochs=args.epochs, criterion=criterion)
+            
+            round_metric = train(
+                model=model, 
+                dataset_train=dataset_train, 
+                dataset_val=dataset_val, 
+                dataset_test=dataset_test, 
+                device=device,
+                output_dir=subject_output_dir, 
+                metrics=args.metrics, 
+                metric_choose=args.metric_choose, 
+                optimizer=optimizer,
+                batch_size=args.batch_size, 
+                epochs=args.epochs, 
+                criterion=criterion
+            )
+            
             best_metrics.append(round_metric)
             if setting.experiment_mode == "subject-dependent":
                 subjects_metrics[rridx-1].append(round_metric)

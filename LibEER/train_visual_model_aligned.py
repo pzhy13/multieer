@@ -26,57 +26,69 @@ def safe_load_patch(*args, **kwargs):
 torch.load = safe_load_patch
 from hsemotion.facial_emotions import HSEmotionRecognizer
 
-# ================= 配置区 =================
-MINI_BATCH_SIZE = 8
-TARGET_BATCH_SIZE = 32
-ACCUMULATION_STEPS = TARGET_BATCH_SIZE // MINI_BATCH_SIZE
+# ================= 早停类 =================
+class EarlyStopping:
+    def __init__(self, patience=7, delta=0, verbose=False, path='checkpoint.pt'):
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_loss_min = np.Inf
+        self.delta = delta
+        self.path = path
 
-# ================= 辅助类 =================
+    def __call__(self, val_loss, model):
+        score = -val_loss
+        if self.best_score is None:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+            self.counter = 0
+
+    def save_checkpoint(self, val_loss, model):
+        torch.save(model.state_dict(), self.path)
+        self.val_loss_min = val_loss
+
+# ================= 数据集类 =================
 class VisualDataset(Dataset):
     def __init__(self, data_list, label_list, transform=None):
         self.data_list = data_list
         self.label_list = label_list
         self.transform = transform
 
-    def __len__(self):
-        return len(self.data_list)
+    def __len__(self): return len(self.data_list)
 
     def __getitem__(self, idx):
         img_path = self.data_list[idx]
-        label_val = self.label_list[idx] # 这里 label_list 已经是展平后的 int 列表
+        label_val = self.label_list[idx] 
         try:
             img = Image.open(img_path).convert('RGB')
             if self.transform: img = self.transform(img)
-        except:
-            print(f"Warning: Failed to load {img_path}")
-            img = torch.zeros(3, 224, 224)
+        except: img = torch.zeros(3, 224, 224)
         return img, torch.tensor(label_val, dtype=torch.long)
 
 def get_visual_data_aligned(args):
-    """
-    读取数据并组织成 List[Subject] -> List[Trail] -> List[Samples] 的结构
-    以便 LibEER 的 split.py 可以按照 Trail 进行划分 (Cross-Trail)
-    """
-    print(f"正在构建视觉数据集索引 (Cross-Trail Mode)...")
+    print(f"Loading Visual Data Index...")
     all_labels = {}
-    # 读取所有被试的标签文件
-    for sub_id in range(1, 23):
+    for sub_id in range(1, 33):
         path = os.path.join(args.dataset_path, f"s{sub_id:02d}.dat")
         if os.path.exists(path):
             with open(path, 'rb') as f:
                 content = pickle.load(f, encoding='latin1')
                 all_labels[sub_id] = content['labels']
-        else:
-            print(f"Warning: Label file for s{sub_id:02d} not found.")
 
-    aligned_data = []  # 结构: [Subject_1_Trails, Subject_2_Trails, ...]
-    aligned_label = [] # 结构: [Subject_1_Labels, Subject_2_Labels, ...]
+    aligned_data = [] 
+    aligned_label = [] 
 
-    for sub_id in range(1, 23):
+    for sub_id in range(1, 33):
         sub_str = f"s{sub_id:02d}"
-        sub_trails_data = []  # 存放该被试所有 Trail 的图片路径列表
-        sub_trails_label = [] # 存放该被试所有 Trail 的标签列表
-        
         sub_face_dir = os.path.join(args.faces_path, sub_str)
         
         if not os.path.exists(sub_face_dir) or sub_id not in all_labels:
@@ -84,78 +96,69 @@ def get_visual_data_aligned(args):
             aligned_label.append([])
             continue
 
-        # DEAP 数据集通常有 40 个 Trail
+        sub_trails_data = []
+        sub_trails_label = []
+
         for trial_id in range(1, 41):
-            # 获取该 Trail 的标签
+            if trial_id > len(all_labels[sub_id]): break
             raw_label = all_labels[sub_id][trial_id - 1]
             valence, arousal = raw_label[0], raw_label[1]
             v_high = valence >= 5
             a_high = arousal >= 5
             
-            # 4分类 (HALV) 逻辑
-            if not v_high and not a_high: cls = 0   # LALV
-            elif not v_high and a_high:   cls = 1   # LAHV
-            elif v_high and not a_high:   cls = 2   # HALV
-            elif v_high and a_high:       cls = 3   # HAHV
+            if not v_high and not a_high: cls = 0   
+            elif not v_high and a_high:   cls = 1   
+            elif v_high and not a_high:   cls = 2   
+            elif v_high and a_high:       cls = 3   
             
-            # 获取该 Trail 下的所有 Segment 图片
             pattern = f"{sub_str}_trial{trial_id:02d}_seg*.jpg"
             search_path = os.path.join(sub_face_dir, pattern)
             files = glob.glob(search_path)
-            # 按 segment ID 排序确保顺序
             files.sort(key=lambda x: int(x.split('_seg')[-1].split('.')[0]))
             
             if len(files) > 0:
-                # 注意：这里我们将一个 Trail 的所有图片作为一个整体存入列表
-                # split.py 会根据这个列表的长度（即 Trail 的数量）进行划分
                 sub_trails_data.append(files)
-                # 标签也要对应图片的数量，重复 cls
                 sub_trails_label.append([cls] * len(files))
+            else:
+                sub_trails_data.append([])
+                sub_trails_label.append([])
 
         aligned_data.append(sub_trails_data)
         aligned_label.append(sub_trails_label)
-        print(f"Subject {sub_str}: Loaded {len(sub_trails_data)} trails.")
-        
     return aligned_data, aligned_label
 
 def flatten_data(data_trails, label_trails, indices):
-    """
-    辅助函数：将选中的 Trail 索引对应的图片和标签展平成一维列表
-    """
     flat_data = []
     flat_label = []
     for i in indices:
-        flat_data.extend(data_trails[i])
-        flat_label.extend(label_trails[i])
+        if i < len(data_trails):
+            flat_data.extend(data_trails[i])
+            flat_label.extend(label_trails[i])
     return flat_data, flat_label
 
 # ================= 主程序 =================
 def main(args):
-    # 强制设置 split 相关的参数以符合你的要求
-    if args.setting is None:
-        # 如果没有指定 preset，手动构建一个基础 setting
-        setting = set_setting_by_args(args)
-    else:
-        setting = preset_setting[args.setting](args)
+    if not hasattr(args, 'output_dir') or args.output_dir is None:
+        args.output_dir = make_output_dir(args, "VisualModel")
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
 
-    # 确保实验模式是 subject-dependent
-    # 注意：split.py 依赖 setting 对象里的属性
-    # 如果 args 里没有传这些参数，这里最好强制覆盖一下，或者确保命令行传入了正确的参数
-    # 例如: --experiment_mode subject-dependent --split_type train-val-test
-    
+    if args.setting is None: setting = set_setting_by_args(args)
+    else: setting = preset_setting[args.setting](args)
+
     setup_seed(args.seed)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    print(f"🔧 Training on: {device} (Gradient Accumulation Mode)")
-
-    # 1. 获取按 Trail 组织的数据
+    
     data_all_subs, label_all_subs = get_visual_data_aligned(args)
     
     train_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.RandomResizedCrop(224, scale=(0.6, 1.0)),
         transforms.RandomHorizontalFlip(),
-        transforms.ColorJitter(brightness=0.1, contrast=0.1),
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.RandomErasing(p=0.3, scale=(0.02, 0.2))
     ])
     
     val_test_transform = transforms.Compose([
@@ -164,144 +167,156 @@ def main(args):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    test_accuracies = [] # 记录所有被试在 Test 集上的最终准确率
+    val_accuracies = [] 
+    test_accuracies = [] 
 
-    # 2. 遍历每个 Subject (Subject-Dependent)
-    for rridx, (data_trails, label_trails) in enumerate(zip(data_all_subs, label_all_subs), 1):
-        if len(data_trails) == 0:
-            continue
-        
-        # 使用 LibEER 的划分逻辑
-        # get_split_index 会返回 Trail 的索引 (因为传入的 data_trails 是 List[Trail])
-        tts = get_split_index(data_trails, label_trails, setting)
-        
-        print(f"\n========== Subject {rridx} Training ==========")
+    target_subjects = list(enumerate(zip(data_all_subs, label_all_subs), 1))
+    if hasattr(args, 'subjects_limit') and args.subjects_limit > 0:
+        target_subjects = target_subjects[:args.subjects_limit]
 
-        # 遍历划分 (通常 train-val-test 只有 1 个 fold，k-fold 会有多个)
+    for rridx, (data_trails, label_trails) in target_subjects:
+        if len(data_trails) == 0: continue
+        
+        eeg_sub_dir = os.path.join(args.eeg_dir, f"sub{rridx:02d}")
+        split_path = os.path.join(eeg_sub_dir, 'split.pkl')
+        
+        if os.path.exists(split_path):
+            with open(split_path, 'rb') as f: tts = pickle.load(f)
+        else:
+            setup_seed(args.seed + rridx)
+            tts = get_split_index(data_trails, label_trails, setting)
+
         for ridx, (train_indexes, test_indexes, val_indexes) in enumerate(zip(tts['train'], tts['test'], tts['val']), 1):
-            setup_seed(args.seed)
-            
-            # 处理验证集为空的情况 (LibEER 逻辑)
-            if val_indexes[0] == -1 or len(val_indexes) == 0:
-                print("Notice: No validation set provided, using test set for validation.")
-                val_indexes = test_indexes
+            if val_indexes[0] == -1 or len(val_indexes) == 0: val_indexes = test_indexes
 
-            print(f"Fold {ridx} - Train Trails: {len(train_indexes)}, Val Trails: {len(val_indexes)}, Test Trails: {len(test_indexes)}")
-
-            # 3. 将 Trail 索引展平为图片样本
             train_paths, train_lbls = flatten_data(data_trails, label_trails, train_indexes)
             val_paths, val_lbls = flatten_data(data_trails, label_trails, val_indexes)
             test_paths, test_lbls = flatten_data(data_trails, label_trails, test_indexes)
 
-            # 构建 Dataset 和 DataLoader
             train_set = VisualDataset(train_paths, train_lbls, transform=train_transform)
             val_set = VisualDataset(val_paths, val_lbls, transform=val_test_transform)
             test_set = VisualDataset(test_paths, test_lbls, transform=val_test_transform)
 
-            train_loader = DataLoader(train_set, batch_size=MINI_BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=False)
-            val_loader = DataLoader(val_set, batch_size=MINI_BATCH_SIZE * 2, shuffle=False, num_workers=0, pin_memory=False)
-            test_loader = DataLoader(test_set, batch_size=MINI_BATCH_SIZE * 2, shuffle=False, num_workers=0, pin_memory=False)
+            train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+            val_loader = DataLoader(val_set, batch_size=args.batch_size*2, shuffle=False, num_workers=4)
+            test_loader = DataLoader(test_set, batch_size=args.batch_size*2, shuffle=False, num_workers=4)
 
-            # 初始化模型
             fer = HSEmotionRecognizer(model_name='enet_b0_8_va_mtl', device='cpu')
             model = fer.model
-            
-            # 修改分类头适配 4 分类
             num_ftrs = 1280
             try:
-                if hasattr(model, 'num_features'): num_ftrs = model.num_features
-                elif hasattr(model, 'classifier') and not isinstance(model.classifier, nn.Identity): num_ftrs = model.classifier.in_features
+                if hasattr(model, 'classifier') and not isinstance(model.classifier, nn.Identity): num_ftrs = model.classifier.in_features
                 elif hasattr(model, 'fc') and not isinstance(model.fc, nn.Identity): num_ftrs = model.fc.in_features
             except: pass
             
-            model.classifier = nn.Linear(num_ftrs, 4)
+            if not args.unfreeze_backbone:
+                for param in model.parameters(): param.requires_grad = False
+            
+            model.classifier = nn.Sequential(
+                nn.Dropout(p=getattr(args, 'dropout', 0.5)),
+                nn.Linear(num_ftrs, 256),
+                nn.ReLU(),
+                nn.Dropout(p=getattr(args, 'dropout', 0.5)),
+                nn.Linear(256, 4)
+            )
             if hasattr(model, 'fc'): model.fc = nn.Identity()
             model.to(device)
 
-            optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
-            criterion = nn.CrossEntropyLoss()
+            optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=getattr(args, 'weight_decay', 1e-2))
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
+            criterion = nn.CrossEntropyLoss(label_smoothing=getattr(args, 'label_smoothing', 0.1))
 
-            best_val_acc = 0.0
             best_model_path = os.path.join(args.output_dir, f"visual_model_sub{rridx}_fold{ridx}_best.pth")
+            early_stopping = EarlyStopping(patience=8, verbose=False, path=best_model_path)
+            
+            best_val_acc_fold = 0.0
 
-            # 🟢🟢🟢 训练循环 🟢🟢🟢
-            for epoch in range(args.epochs):
+            pbar = tqdm(range(args.epochs), desc=f"S{rridx}", leave=False)
+            for epoch in pbar:
                 model.train()
-                train_loss = 0
+                train_loss_sum = 0
+                train_correct = 0
+                train_total = 0
                 
-                # 训练步骤
-                pbar = tqdm(train_loader, desc=f"Train S{rridx} F{ridx} Ep{epoch+1}", leave=False)
-                for i, (imgs, targets) in enumerate(pbar):
+                for imgs, targets in train_loader:
                     imgs, targets = imgs.to(device), targets.to(device)
+                    optimizer.zero_grad()
                     outputs = model(imgs)
                     loss = criterion(outputs, targets)
-                    
-                    loss = loss / ACCUMULATION_STEPS
                     loss.backward()
+                    optimizer.step()
                     
-                    if (i + 1) % ACCUMULATION_STEPS == 0:
-                        optimizer.step()
-                        optimizer.zero_grad()
-                    
-                    train_loss += loss.item() * ACCUMULATION_STEPS
+                    train_loss_sum += loss.item()
+                    train_correct += (outputs.argmax(1) == targets).sum().item()
+                    train_total += targets.size(0)
+                
+                scheduler.step()
+                
+                train_acc = train_correct / train_total
+                avg_train_loss = train_loss_sum / len(train_loader)
 
-                # 验证步骤 (用于模型选择)
                 model.eval()
                 val_correct = 0
                 val_total = 0
+                val_loss_sum = 0
                 with torch.no_grad():
                     for imgs, targets in val_loader:
                         imgs, targets = imgs.to(device), targets.to(device)
                         outputs = model(imgs)
-                        _, preds = torch.max(outputs, 1)
-                        val_correct += torch.sum(preds == targets.data)
+                        loss = criterion(outputs, targets)
+                        val_loss_sum += loss.item()
+                        val_correct += (outputs.argmax(1) == targets).sum().item()
                         val_total += targets.size(0)
                 
-                val_acc = val_correct.double() / val_total if val_total > 0 else 0
+                val_acc = val_correct / val_total
+                avg_val_loss = val_loss_sum / len(val_loader)
                 
-                # 保存最佳模型
-                if val_acc > best_val_acc:
-                    best_val_acc = val_acc
+                if val_acc > best_val_acc_fold: 
+                    best_val_acc_fold = val_acc
                     torch.save(model.state_dict(), best_model_path)
+                    print(f"💾 New Best Model Saved for Subject {rridx} Fold {ridx} at Epoch {epoch+1} with Val Acc: {val_acc:.4f}")
                 
-                # print(f"Epoch {epoch+1} Loss: {train_loss/len(train_loader):.4f} Val Acc: {val_acc:.4f}")
+                # 🔥🔥🔥 日志优化：同时打印 Train/Val Loss 和 Acc 🔥🔥🔥
+                pbar.set_postfix({
+                    'T_Loss': f"{avg_train_loss:.3f}",
+                    'V_Loss': f"{avg_val_loss:.3f}",
+                    'T_Acc': f"{train_acc:.3f}",
+                    'V_Acc': f"{val_acc:.3f}"
+                })
 
-            # 🟢🟢🟢 测试步骤 (Test Evaluation) 🟢🟢🟢
-            # 加载验证集上表现最好的模型
+            val_accuracies.append(best_val_acc_fold)
+            
             if os.path.exists(best_model_path):
                 model.load_state_dict(torch.load(best_model_path, map_location=device))
-                print(f"Loaded best model with Val Acc: {best_val_acc:.4f}")
-            else:
-                print("Warning: No model saved, using last epoch model.")
-
             model.eval()
             test_correct = 0
             test_total = 0
             with torch.no_grad():
-                for imgs, targets in tqdm(test_loader, desc=f"Testing S{rridx} F{ridx}"):
+                for imgs, targets in test_loader:
                     imgs, targets = imgs.to(device), targets.to(device)
                     outputs = model(imgs)
-                    _, preds = torch.max(outputs, 1)
-                    test_correct += torch.sum(preds == targets.data)
+                    test_correct += (outputs.argmax(1) == targets).sum().item()
                     test_total += targets.size(0)
             
-            test_acc = test_correct.double() / test_total if test_total > 0 else 0
-            print(f"👉 Subject {rridx} Fold {ridx} TEST ACCURACY: {test_acc:.4f}")
-            test_accuracies.append(test_acc.item())
+            test_acc = test_correct / test_total
+            print(f"👉 Subject {rridx} Test Acc: {test_acc:.4f} (Best Val Acc: {best_val_acc_fold:.4f})")
+            test_accuracies.append(test_acc)
 
-    print("\n========== Final Results ==========")
-    print(f"Average Test Accuracy across {len(test_accuracies)} folds/subjects: {np.mean(test_accuracies):.4f}")
+    mean_val = np.mean(val_accuracies) if len(val_accuracies) > 0 else 0.0
+    mean_test = np.mean(test_accuracies) if len(test_accuracies) > 0 else 0.0
+    print(f"Mean Val Acc: {mean_val:.4f} | Mean Test Acc: {mean_test:.4f}")
+    
+    return mean_val
 
 if __name__ == '__main__':
     parser = get_args_parser()
-    parser.add_argument('-faces_path', type=str, required=True, help='Path to the face images directory')
-    # 建议运行时添加以下参数以确保 split 逻辑正确:
-    # -experiment_mode subject-dependent -split_type train-val-test -test_size 0.2 -val_size 0.1
+    parser.add_argument('-faces_path', type=str, required=True)
+    parser.add_argument('-eeg_dir', type=str, required=True)
+    parser.add_argument('-unfreeze_backbone', action='store_true')
+    parser.add_argument('-dropout', type=float, default=0.5)
+    parser.add_argument('-weight_decay', type=float, default=1e-2)
+    parser.add_argument('-label_smoothing', type=float, default=0.1)
+    parser.add_argument('-subjects_limit', type=int, default=0)
+    
     args = parser.parse_args()
-    
-    args.output_dir = make_output_dir(args, "VisualModel")
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
-    print(f"📂 Output directory: {args.output_dir}")
-    
     main(args)

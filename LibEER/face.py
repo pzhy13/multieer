@@ -17,7 +17,7 @@ TARGET_SIZE = (224, 224)
 
 # DEAP 数据集参数 (和之前保持一致)
 FS = 128
-VIDEO_OFFSET_SEC = 3.0  # 跳过前3秒基线
+VIDEO_OFFSET_SEC = 0.0  # 跳过前3秒基线
 
 # 训练参数 (EEGNet/RGNN 通用设置: 1秒1张)
 TRAIN_SAMPLE_LENGTH_POINTS = 128
@@ -41,7 +41,7 @@ def extract_frames():
     detector = get_face_detector()
     
     # 遍历32个被试
-    for sub_id in range(1, 33):
+    for sub_id in range(1, 23):
         sub_str = f"s{sub_id:02d}"
         video_dir = os.path.join(BASE_VIDEO_PATH, sub_str)
         output_sub_dir = os.path.join(OUTPUT_BASE_PATH, sub_str)

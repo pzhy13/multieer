@@ -2,7 +2,9 @@ LibEER/data_original/
 LibEER/data_preprocessed_python/
 *.pyc
 LibEER/faces_224/
+LibEER/faces_224_backup/
 LibEER/result/
+LibEER/checkpoints/
 LibEER.code-workspace
 .github/copilot-instructions.md
 .vscode/settings.json
@@ -11,3 +13,4 @@ LibEER/debug_find_empty_trails.py
 LibEER/export_eegnet.py
 LibEER/mptest.py
 LibEER/test_face_recog.py
+*.log
