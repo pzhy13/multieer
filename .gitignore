@@ -2,6 +2,7 @@ LibEER/data_original/
 LibEER/data_preprocessed_python/
 *.pyc
 LibEER/faces_224/
+LibEER/log/
 LibEER/faces_224_backup/
 LibEER/result/
 LibEER/checkpoints/
