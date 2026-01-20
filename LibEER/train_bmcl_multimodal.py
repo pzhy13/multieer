@@ -10,7 +10,8 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, models
 from PIL import Image
 from tqdm import tqdm
-from sklearn.metrics import f1_score, accuracy_score
+# 🔥 新增导入 confusion_matrix
+from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 import argparse
 
 # 引入 LibEER 工具
@@ -293,12 +294,29 @@ def prepare_multimodal_data(eeg_data, eeg_labels, img_paths_struct, indices, sub
             
     return dataset_list
 
-# ================= 4. 主程序 =================
+# ================= 4. 辅助打印函数 =================
+def print_metrics(targets, preds, classes=None):
+    cm = confusion_matrix(targets, preds)
+    per_class_acc = cm.diagonal() / (cm.sum(axis=1) + 1e-6) # 防止除零
+    macro_f1 = f1_score(targets, preds, average='macro')
+    acc = accuracy_score(targets, preds)
+    
+    print(f"\n{'='*20} Metrics Report {'='*20}")
+    print(f"Overall Acc: {acc:.4f} | Macro F1: {macro_f1:.4f}")
+    print("-" * 30)
+    print(f"Confusion Matrix:\n{cm}")
+    print("-" * 30)
+    print("Per-class Accuracy:")
+    for i, acc in enumerate(per_class_acc):
+        cls_name = classes[i] if classes else f"Class {i}"
+        print(f"  {cls_name}: {acc:.4f} ({cm[i,i]}/{cm.sum(axis=1)[i]})")
+    print(f"{'='*56}\n")
+    return acc, macro_f1
+
+# ================= 5. 主程序 =================
 
 def main(args):
-    # --- 目录设置 ---
-    if args.output_dir is None:
-        args.output_dir = "BMCL_Result"
+    if args.output_dir is None: args.output_dir = "BMCL_Result"
     if not os.path.exists(args.output_dir): os.makedirs(args.output_dir)
 
     # --- Setting 配置 ---
@@ -314,9 +332,11 @@ def main(args):
     # get_data 返回 (Session, Subject, Trial...), 需要 merge_to_part 展平为 (Subject, Trial...)
     data, label, channels, feature_dim, num_classes = get_data(setting)
     data_all, label_all = merge_to_part(data, label, setting)
-    print(f"EEG Loaded. Subjects: {len(data_all)}, TimeDim: {feature_dim}, Classes: {num_classes}")
-
-    # --- 2. 加载图像路径结构 ---
+    
+    # 假设 DEAP 4分类的含义 (Valence/Arousal 组合)
+    # 0: LVLA (Low Valence Low Arousal), 1: LVHA, 2: HVLA, 3: HVHA (具体顺序取决于你的 label_process)
+    class_names = [f"Class {i}" for i in range(num_classes)]
+    
     print("Indexing Image Paths...")
     img_paths_all = get_visual_paths_per_trial(args)
     
@@ -396,34 +416,25 @@ def main(args):
             crit_cmd = CMDLoss()
             crit_diff = DiffLoss()
             
-            # 结果保存路径
-            best_val_acc = 0.0
-            best_model_path = os.path.join(args.output_dir, f"sub{sub_id:02d}", "checkpoint-bestmacro-f1.pth")
+            best_val_score = 0.0 # 根据 F1 还是 Acc 保存？通常 F1 更稳健，这里保持 Acc 以兼容之前逻辑，也可改为 F1
+            best_f1_score = 0.0
+            best_model_path = os.path.join(args.output_dir, f"sub{sub_id:02d}", "checkpoint-bestacc.pth")
+            best_model_path_f1 = os.path.join(args.output_dir, f"sub{sub_id:02d}", "checkpoint-bestf1.pth")
             if not os.path.exists(os.path.dirname(best_model_path)): os.makedirs(os.path.dirname(best_model_path))
 
-            # --- Training Loop ---
             pbar = tqdm(range(args.epochs), desc=f"S{sub_id}-Fold{fold_idx}", leave=False)
             for epoch in pbar:
                 model.train()
                 train_loss_sum = 0
-                train_correct = 0
-                train_total = 0
+                train_preds, train_targets = [], []
                 
                 for imgs, eegs, lbls in train_loader:
                     imgs, eegs, lbls = imgs.to(device), eegs.to(device), lbls.to(device)
                     optimizer.zero_grad()
-                    
                     out = model(imgs, eegs)
                     
-                    # 1. Classification Loss (Fusion + Aux)
-                    l_cls = crit_cls(out['out_fusion'], lbls) + \
-                            0.5 * crit_cls(out['out_vis'], lbls) + \
-                            0.5 * crit_cls(out['out_eeg'], lbls)
-                    
-                    # 2. Similarity Loss (CMD) on Common Features
+                    l_cls = crit_cls(out['out_fusion'], lbls) + 0.5 * crit_cls(out['out_vis'], lbls) + 0.5 * crit_cls(out['out_eeg'], lbls)
                     l_sim = args.alpha * crit_cmd(out['vis_c'], out['eeg_c'])
-                    
-                    # 3. Difference Loss on Common vs Private
                     l_diff = args.beta * (crit_diff(out['vis_c'], out['vis_p']) + crit_diff(out['eeg_c'], out['eeg_p']))
                     
                     loss = l_cls + l_sim + l_diff
@@ -431,60 +442,63 @@ def main(args):
                     optimizer.step()
                     
                     train_loss_sum += loss.item()
-                    train_correct += (out['out_fusion'].argmax(1) == lbls).sum().item()
-                    train_total += lbls.size(0)
+                    train_preds.extend(out['out_fusion'].argmax(1).cpu().numpy())
+                    train_targets.extend(lbls.cpu().numpy())
                 
                 scheduler.step()
                 
                 # Validation
                 model.eval()
-                val_correct = 0
-                val_total = 0
                 val_loss_sum = 0
+                val_preds, val_targets = [], []
                 
                 with torch.no_grad():
                     for imgs, eegs, lbls in val_loader:
                         imgs, eegs, lbls = imgs.to(device), eegs.to(device), lbls.to(device)
                         out = model(imgs, eegs)
-                        
                         loss = crit_cls(out['out_fusion'], lbls)
                         val_loss_sum += loss.item()
-                        val_correct += (out['out_fusion'].argmax(1) == lbls).sum().item()
-                        val_total += lbls.size(0)
+                        val_preds.extend(out['out_fusion'].argmax(1).cpu().numpy())
+                        val_targets.extend(lbls.cpu().numpy())
                 
-                val_acc = val_correct / val_total
-                train_acc = train_correct / train_total
+                # 🔥 计算复杂指标
+                val_acc = accuracy_score(val_targets, val_preds)
+                val_f1 = f1_score(val_targets, val_preds, average='macro')
+                train_acc = accuracy_score(train_targets, train_preds)
                 
-                # Save Best
-                if val_acc > best_val_acc:
-                    best_val_acc = val_acc
+                if val_acc > best_val_score:
+                    best_val_score = val_acc
                     torch.save(model.state_dict(), best_model_path)
-                    tqdm.write(f"💾 New Best Model Saved for Subject {sub_id} Fold {fold_idx} at Epoch {epoch+1} with Val Acc: {val_acc:.4f}")
+                    tqdm.write(f"💾 Saved Best (Ep{epoch+1}): Val Acc {val_acc:.4f} | Val F1 {val_f1:.4f}")
                 
+                if val_f1 > best_f1_score:
+                    best_f1_score = val_f1
+                    torch.save(model.state_dict(), best_model_path_f1)
+                    tqdm.write(f"💾 Saved Best F1 (Ep{epoch+1}): Val Acc {val_acc:.4f} | Val F1 {val_f1:.4f}")
+
                 pbar.set_postfix({
-                    'T_Loss': f"{train_loss_sum/len(train_loader):.3f}",
-                    'V_Loss': f"{val_loss_sum/len(val_loader):.3f}",
-                    'T_Acc': f"{train_acc:.3f}",
-                    'V_Acc': f"{val_acc:.3f}"
+                    'T_Loss': f"{train_loss_sum/len(train_loader):.2f}",
+                    'V_Loss': f"{val_loss_sum/len(val_loader):.2f}",
+                    'T_Acc': f"{train_acc:.2f}",
+                    'V_Acc': f"{val_acc:.2f}",
+                    'V_F1': f"{val_f1:.2f}"
                 })
 
             # --- Testing ---
-            if os.path.exists(best_model_path):
-                model.load_state_dict(torch.load(best_model_path, map_location=device))
+            if os.path.exists(best_model_path_f1):
+                model.load_state_dict(torch.load(best_model_path_f1, map_location=device))
             
             model.eval()
-            test_correct = 0
-            test_total = 0
+            test_preds, test_targets = [], []
             with torch.no_grad():
                 for imgs, eegs, lbls in test_loader:
                     imgs, eegs, lbls = imgs.to(device), eegs.to(device), lbls.to(device)
                     out = model(imgs, eegs)
-                    test_correct += (out['out_fusion'].argmax(1) == lbls).sum().item()
-                    test_total += lbls.size(0)
+                    test_preds.extend(out['out_fusion'].argmax(1).cpu().numpy())
+                    test_targets.extend(lbls.cpu().numpy())
             
-            test_acc = test_correct / test_total
-            print(f"👉 Subject {sub_id:02d} Test Acc: {test_acc:.4f} (Best Val Acc: {best_val_acc:.4f})")
-            print(f"Model saved to: {best_model_path}")
+            print(f"\n👉 Subject {sub_id:02d} Test Results:")
+            test_acc, test_f1 = print_metrics(test_targets, test_preds, class_names)
             test_accuracies.append(test_acc)
 
     print(f"\nOverall Mean Test Acc: {np.mean(test_accuracies):.4f}")

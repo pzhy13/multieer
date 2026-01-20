@@ -10,6 +10,7 @@ from torchvision import transforms
 from PIL import Image
 from tqdm import tqdm
 import argparse
+from sklearn.metrics import f1_score  # 🔴 新增
 
 # 引入 LibEER 工具
 from config.setting import preset_setting, set_setting_by_args
@@ -167,8 +168,8 @@ def main(args):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    val_accuracies = [] 
     test_accuracies = [] 
+    test_f1s = []  # 🔴 新增
 
     target_subjects = list(enumerate(zip(data_all_subs, label_all_subs), 1))
     if hasattr(args, 'subjects_limit') and args.subjects_limit > 0:
@@ -226,18 +227,12 @@ def main(args):
             scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
             criterion = nn.CrossEntropyLoss(label_smoothing=getattr(args, 'label_smoothing', 0.1))
 
-            best_model_path = os.path.join(args.output_dir, f"visual_model_sub{rridx}_fold{ridx}_best.pth")
-            early_stopping = EarlyStopping(patience=8, verbose=False, path=best_model_path)
-            
-            best_val_acc_fold = 0.0
+            best_model_path = os.path.join(args.output_dir, f"visual_model_sub{rridx}_fold{ridx}_bestf1.pth")
+            best_val_f1 = 0.0  # 🔴 关键修改
 
             pbar = tqdm(range(args.epochs), desc=f"S{rridx}", leave=False)
             for epoch in pbar:
                 model.train()
-                train_loss_sum = 0
-                train_correct = 0
-                train_total = 0
-                
                 for imgs, targets in train_loader:
                     imgs, targets = imgs.to(device), targets.to(device)
                     optimizer.zero_grad()
@@ -245,68 +240,44 @@ def main(args):
                     loss = criterion(outputs, targets)
                     loss.backward()
                     optimizer.step()
-                    
-                    train_loss_sum += loss.item()
-                    train_correct += (outputs.argmax(1) == targets).sum().item()
-                    train_total += targets.size(0)
-                
                 scheduler.step()
-                
-                train_acc = train_correct / train_total
-                avg_train_loss = train_loss_sum / len(train_loader)
 
                 model.eval()
-                val_correct = 0
-                val_total = 0
-                val_loss_sum = 0
+                val_preds, val_gts = [], []
                 with torch.no_grad():
                     for imgs, targets in val_loader:
-                        imgs, targets = imgs.to(device), targets.to(device)
+                        imgs = imgs.to(device)
                         outputs = model(imgs)
-                        loss = criterion(outputs, targets)
-                        val_loss_sum += loss.item()
-                        val_correct += (outputs.argmax(1) == targets).sum().item()
-                        val_total += targets.size(0)
-                
-                val_acc = val_correct / val_total
-                avg_val_loss = val_loss_sum / len(val_loader)
-                
-                if val_acc > best_val_acc_fold: 
-                    best_val_acc_fold = val_acc
-                    torch.save(model.state_dict(), best_model_path)
-                    print(f"💾 New Best Model Saved for Subject {rridx} Fold {ridx} at Epoch {epoch+1} with Val Acc: {val_acc:.4f}")
-                
-                # 🔥🔥🔥 日志优化：同时打印 Train/Val Loss 和 Acc 🔥🔥🔥
-                pbar.set_postfix({
-                    'T_Loss': f"{avg_train_loss:.3f}",
-                    'V_Loss': f"{avg_val_loss:.3f}",
-                    'T_Acc': f"{train_acc:.3f}",
-                    'V_Acc': f"{val_acc:.3f}"
-                })
+                        val_preds.extend(outputs.argmax(1).cpu().numpy())
+                        val_gts.extend(targets.numpy())
 
-            val_accuracies.append(best_val_acc_fold)
-            
-            if os.path.exists(best_model_path):
-                model.load_state_dict(torch.load(best_model_path, map_location=device))
+                val_f1 = f1_score(val_gts, val_preds, average='macro')
+
+                if val_f1 > best_val_f1:
+                    best_val_f1 = val_f1
+                    torch.save(model.state_dict(), best_model_path)
+
+                pbar.set_postfix({'V_F1': f"{val_f1:.3f}"})
+
+            model.load_state_dict(torch.load(best_model_path, map_location=device))
             model.eval()
-            test_correct = 0
-            test_total = 0
+            test_preds, test_gts = [], []
             with torch.no_grad():
                 for imgs, targets in test_loader:
-                    imgs, targets = imgs.to(device), targets.to(device)
+                    imgs = imgs.to(device)
                     outputs = model(imgs)
-                    test_correct += (outputs.argmax(1) == targets).sum().item()
-                    test_total += targets.size(0)
-            
-            test_acc = test_correct / test_total
-            print(f"👉 Subject {rridx} Test Acc: {test_acc:.4f} (Best Val Acc: {best_val_acc_fold:.4f})")
-            test_accuracies.append(test_acc)
+                    test_preds.extend(outputs.argmax(1).cpu().numpy())
+                    test_gts.extend(targets.numpy())
 
-    mean_val = np.mean(val_accuracies) if len(val_accuracies) > 0 else 0.0
-    mean_test = np.mean(test_accuracies) if len(test_accuracies) > 0 else 0.0
-    print(f"Mean Val Acc: {mean_val:.4f} | Mean Test Acc: {mean_test:.4f}")
-    
-    return mean_val
+            test_acc = np.mean(np.array(test_preds) == np.array(test_gts))
+            test_f1 = f1_score(test_gts, test_preds, average='macro')
+
+            print(f"👉 Subject {rridx} Test Acc: {test_acc:.4f} | Test F1: {test_f1:.4f}")
+            test_accuracies.append(test_acc)
+            test_f1s.append(test_f1)
+
+    print(f"Test Acc: {np.mean(test_accuracies):.4f} ± {np.std(test_accuracies):.4f}")
+    print(f"Test F1 : {np.mean(test_f1s):.4f} ± {np.std(test_f1s):.4f}")
 
 if __name__ == '__main__':
     parser = get_args_parser()
@@ -317,6 +288,5 @@ if __name__ == '__main__':
     parser.add_argument('-weight_decay', type=float, default=1e-2)
     parser.add_argument('-label_smoothing', type=float, default=0.1)
     parser.add_argument('-subjects_limit', type=int, default=0)
-    
     args = parser.parse_args()
     main(args)
