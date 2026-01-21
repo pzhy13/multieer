@@ -34,7 +34,34 @@ torch.load = safe_load_patch
 from hsemotion.facial_emotions import HSEmotionRecognizer
 
 # ================= 1. 损失函数 (BMCL 核心) =================
+class GatedFusion(nn.Module):
+    """ [Modified] 门控融合机制：替代原有的 AttentionFusion """
+    def __init__(self, input_dim):
+        super(GatedFusion, self).__init__()
+        # input_dim 是拼接后的特征维度
+        self.fc = nn.Sequential(
+            nn.Linear(input_dim, input_dim // 2),
+            nn.BatchNorm1d(input_dim // 2),
+            nn.ReLU(),
+            nn.Linear(input_dim // 2, 2) # 输出两个权重: [Weight_Vis, Weight_EEG]
+        )
+        self.softmax = nn.Softmax(dim=1)
 
+    def forward(self, x):
+        # x: [batch, input_dim] (即 vis + eeg 拼接)
+        # 1. 计算权重
+        weights = self.softmax(self.fc(x)) # [B, 2]
+        w_vis = weights[:, 0].unsqueeze(1) # [B, 1]
+        w_eeg = weights[:, 1].unsqueeze(1) # [B, 1]
+        
+        # 2. 切分特征 (假设 x 是 vis 和 eeg 拼接而成，且两者维度相同)
+        half = x.size(1) // 2
+        vis_part = x[:, :half]
+        eeg_part = x[:, half:]
+        
+        # 3. 加权拼接 (保持输出维度与输入一致，以便后续分类器复用)
+        return torch.cat([w_vis * vis_part, w_eeg * eeg_part], dim=1)
+    
 class CMDLoss(nn.Module):
     """ Central Moment Discrepancy (CMD) 用于拉近公共空间的分布 """
     def __init__(self, k=3):
@@ -147,6 +174,9 @@ class CoupledModel(nn.Module):
         
         self.dropout = nn.Dropout(0.5)
         
+        # [Modified] 使用 GatedFusion 替代 AttentionFusion
+        self.attention = GatedFusion(fusion_input_dim)
+        
         # 辅助分类器，帮助单模态特征学习
         self.vis_classifier = nn.Linear(common_dim + private_dim, num_classes)
         self.eeg_classifier = nn.Linear(common_dim + private_dim, num_classes)
@@ -186,7 +216,8 @@ class CoupledModel(nn.Module):
         
         # Fusion
         fusion_feat = torch.cat([vis_c, vis_p, eeg_c, eeg_p], dim=1)
-        out_fusion = self.fusion_classifier(self.dropout(fusion_feat))
+        fusion_feat_weighted = self.attention(fusion_feat)
+        out_fusion = self.fusion_classifier(self.dropout(fusion_feat_weighted))
 
         return {
             'vis_c': vis_c, 'vis_p': vis_p, 
@@ -389,6 +420,15 @@ def main(args):
                 print(f"Skipping S{sub_id} Fold {fold_idx} (No data)")
                 continue
 
+            # [Modified] 动态计算类别权重 (解决样本不平衡)
+            current_train_labels = [y for _, _, y in train_list]
+            class_counts = np.bincount(current_train_labels, minlength=num_classes)
+            # 使用 Log 平滑的 Inverse Frequency
+            weights = 1.0 / (np.log1p(class_counts) + 1.0)
+            weights = weights / weights.mean() # 归一化
+            class_weights = torch.FloatTensor(weights).to(device)
+            print(f"  > Fold {fold_idx} Class Weights: {weights}")
+
             # DataLoader
             train_loader = DataLoader(MultimodalDataset(train_list, transform=train_transform), 
                                       batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
@@ -412,7 +452,8 @@ def main(args):
                                     lr=args.lr, weight_decay=1e-2)
             scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
             
-            crit_cls = nn.CrossEntropyLoss()
+            # [Modified] 应用 Label Smoothing 和 Class Weights
+            crit_cls = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
             crit_cmd = CMDLoss()
             crit_diff = DiffLoss()
             
@@ -427,6 +468,7 @@ def main(args):
                 model.train()
                 train_loss_sum = 0
                 train_preds, train_targets = [], []
+                train_preds_v, train_preds_e = [], []  # 新增
                 
                 for imgs, eegs, lbls in train_loader:
                     imgs, eegs, lbls = imgs.to(device), eegs.to(device), lbls.to(device)
@@ -443,6 +485,8 @@ def main(args):
                     
                     train_loss_sum += loss.item()
                     train_preds.extend(out['out_fusion'].argmax(1).cpu().numpy())
+                    train_preds_v.extend(out['out_vis'].argmax(1).cpu().numpy()) # 新增：视觉头预测
+                    train_preds_e.extend(out['out_eeg'].argmax(1).cpu().numpy()) # 新增：EEG头预测
                     train_targets.extend(lbls.cpu().numpy())
                 
                 scheduler.step()
@@ -451,6 +495,7 @@ def main(args):
                 model.eval()
                 val_loss_sum = 0
                 val_preds, val_targets = [], []
+                val_preds_v, val_preds_e = [], [] # 新增
                 
                 with torch.no_grad():
                     for imgs, eegs, lbls in val_loader:
@@ -459,28 +504,34 @@ def main(args):
                         loss = crit_cls(out['out_fusion'], lbls)
                         val_loss_sum += loss.item()
                         val_preds.extend(out['out_fusion'].argmax(1).cpu().numpy())
+                        val_preds_v.extend(out['out_vis'].argmax(1).cpu().numpy()) # 新增
+                        val_preds_e.extend(out['out_eeg'].argmax(1).cpu().numpy()) # 新增
                         val_targets.extend(lbls.cpu().numpy())
                 
                 # 🔥 计算复杂指标
                 val_acc = accuracy_score(val_targets, val_preds)
+                val_acc_v = accuracy_score(val_targets, val_preds_v) # 视觉准确率
+                val_acc_e = accuracy_score(val_targets, val_preds_e) # EEG准确率
                 val_f1 = f1_score(val_targets, val_preds, average='macro')
                 train_acc = accuracy_score(train_targets, train_preds)
                 
                 if val_acc > best_val_score:
                     best_val_score = val_acc
                     torch.save(model.state_dict(), best_model_path)
-                    tqdm.write(f"💾 Saved Best (Ep{epoch+1}): Val Acc {val_acc:.4f} | Val F1 {val_f1:.4f}")
+                    # tqdm.write(f"💾 Saved Best (Ep{epoch+1}): Val Acc {val_acc:.4f} | Val F1 {val_f1:.4f}")
                 
                 if val_f1 > best_f1_score:
                     best_f1_score = val_f1
                     torch.save(model.state_dict(), best_model_path_f1)
-                    tqdm.write(f"💾 Saved Best F1 (Ep{epoch+1}): Val Acc {val_acc:.4f} | Val F1 {val_f1:.4f}")
+                    # tqdm.write(f"💾 Saved Best F1 (Ep{epoch+1}): Val Acc {val_acc:.4f} | Val F1 {val_f1:.4f}")
 
                 pbar.set_postfix({
                     'T_Loss': f"{train_loss_sum/len(train_loader):.2f}",
                     'V_Loss': f"{val_loss_sum/len(val_loader):.2f}",
                     'T_Acc': f"{train_acc:.2f}",
                     'V_Acc': f"{val_acc:.2f}",
+                    'Vis': f"{val_acc_v:.2f}", # Visual Acc
+                    'EEG': f"{val_acc_e:.2f}", # EEG Acc
                     'V_F1': f"{val_f1:.2f}"
                 })
 
@@ -490,14 +541,24 @@ def main(args):
             
             model.eval()
             test_preds, test_targets = [], []
+            test_preds_v, test_preds_e = [], [] # 新增
             with torch.no_grad():
                 for imgs, eegs, lbls in test_loader:
                     imgs, eegs, lbls = imgs.to(device), eegs.to(device), lbls.to(device)
                     out = model(imgs, eegs)
                     test_preds.extend(out['out_fusion'].argmax(1).cpu().numpy())
+                    test_preds_v.extend(out['out_vis'].argmax(1).cpu().numpy()) # 新增
+                    test_preds_e.extend(out['out_eeg'].argmax(1).cpu().numpy()) # 新增
                     test_targets.extend(lbls.cpu().numpy())
             
             print(f"\n👉 Subject {sub_id:02d} Test Results:")
+            print("--- [1] Visual Only Branch ---")
+            print_metrics(test_targets, test_preds_v, class_names)
+
+            print("--- [2] EEG Only Branch ---")
+            print_metrics(test_targets, test_preds_e, class_names)
+
+            print("--- [3] Fusion Branch (Final) ---")
             test_acc, test_f1 = print_metrics(test_targets, test_preds, class_names)
             test_accuracies.append(test_acc)
 
@@ -509,8 +570,9 @@ if __name__ == '__main__':
     parser.add_argument('-eeg_dir', type=str, required=True, help="Directory containing subXX/split.pkl")
     parser.add_argument('-vis_backbone', type=str, default='hsemotion', choices=['hsemotion', 'resnet'])
     parser.add_argument('-eeg_backbone', type=str, default='eegnet', choices=['eegnet', 'rgnn'])
-    parser.add_argument('-alpha', type=float, default=0.1, help="Weight for CMD Loss")
-    parser.add_argument('-beta', type=float, default=0.01, help="Weight for Diff Loss")
+    # [Modified] 调整了默认参数，降低 alpha/beta 以减少负迁移
+    parser.add_argument('-alpha', type=float, default=0.01, help="Weight for CMD Loss")
+    parser.add_argument('-beta', type=float, default=0.001, help="Weight for Diff Loss")
     
     args = parser.parse_args()
     main(args)
